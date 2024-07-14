@@ -8,33 +8,39 @@ Date: June 12th, 2018
 from CNN.forward import *
 import numpy as np
 import gzip
+import struct
 
 #####################################################
 ################## Utility Methods ##################
 #####################################################
         
-def extract_data(filename, num_images, IMAGE_WIDTH):
-    '''
-    Extract images by reading the file bytestream. Reshape the read values into a 3D matrix of dimensions [m, h, w], where m 
-    is the number of training examples.
-    '''
-    print('Extracting', filename)
-    with gzip.open(filename) as bytestream:
-        bytestream.read(16)
-        buf = bytestream.read(IMAGE_WIDTH * IMAGE_WIDTH * num_images)
-        data = np.frombuffer(buf, dtype=np.uint8).astype(np.float32)
-        data = data.reshape(num_images, IMAGE_WIDTH*IMAGE_WIDTH)
-        return data
+def extract_data(filename):
+    with open(filename, 'rb') as f:
+        bin_data = f.read()
+    offset = 0
+    fmt_header = '>IIII'
+    magic_number, num_images, num_rows, num_cols = struct.unpack_from(fmt_header, bin_data, offset)
+    offset += struct.calcsize(fmt_header)
+    image_size = num_rows * num_cols
+    fmt_image = '>' + str(image_size) + 'B'
+    images = np.empty((num_images, num_rows, num_cols))
+    for i in range(num_images):
+        images[i] = np.array(struct.unpack_from(fmt_image, bin_data, offset)).reshape((num_rows, num_cols))
+        offset += struct.calcsize(fmt_image)
+    return images
 
-def extract_labels(filename, num_images):
-    '''
-    Extract label into vector of integer values of dimensions [m, 1], where m is the number of images.
-    '''
-    print('Extracting', filename)
-    with gzip.open(filename) as bytestream:
-        bytestream.read(8)
-        buf = bytestream.read(1 * num_images)
-        labels = np.frombuffer(buf, dtype=np.uint8).astype(np.int64)
+def extract_labels(filename):
+    with open(filename, 'rb') as f:
+        bin_data = f.read()
+    offset = 0
+    fmt_header = '>II'
+    magic_number, num_images = struct.unpack_from(fmt_header, bin_data, offset)
+    offset += struct.calcsize(fmt_header)
+    fmt_image = '>B'
+    labels = np.empty(num_images)
+    for i in range(num_images):
+        labels[i] = struct.unpack_from(fmt_image, bin_data, offset)[0]
+        offset += struct.calcsize(fmt_image)
     return labels
 
 def initializeFilter(size, scale = 1.0):
@@ -49,7 +55,7 @@ def nanargmax(arr):
     idxs = np.unravel_index(idx, arr.shape)
     return idxs    
 
-def predict(image, f1, f2, w3, w4, b1, b2, b3, b4, conv_s = 1, pool_f = 2, pool_s = 2):
+def predict(image, f1, f2, w3, w4, b1, b2, b3, b4, conv_s = 1, pool_f = 3, pool_s = 3):
     '''
     Make predictions with trained filters/weights. 
     '''
@@ -59,7 +65,7 @@ def predict(image, f1, f2, w3, w4, b1, b2, b3, b4, conv_s = 1, pool_f = 2, pool_
     conv2 = convolution(conv1, f2, b2, conv_s) # second convolution operation
     conv2[conv2<=0] = 0 # pass through ReLU non-linearity
     
-    pooled = maxpool(conv2, pool_f, pool_s) # maxpooling operation
+    pooled = avgpool(conv2, pool_f, pool_s) # maxpooling operation
     (nf2, dim2, _) = pooled.shape
     fc = pooled.reshape((nf2 * dim2 * dim2, 1)) # flatten pooled layer
     

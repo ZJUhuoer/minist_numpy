@@ -44,27 +44,30 @@ def convolutionBackward(dconv_prev, conv_in, filt, s):
     return dout, dfilt, dbias
 
 
-
-def maxpoolBackward(dpool, orig, f, s):
+def meanpoolBackward(dpool, orig, f, s):
     '''
-    Backpropagation through a maxpooling layer. The gradients are passed through the indices of greatest value in the original maxpooling during the forward step.
+    Backpropagation through an average pooling layer. The gradients are evenly distributed back to the original pooling region.
     '''
     (n_c, orig_dim, _) = orig.shape
-    
+    (dpool_dim, _, _) = dpool.shape  # Get the dimensions of dpool
+
     dout = np.zeros(orig.shape)
-    
+
     for curr_c in range(n_c):
         curr_y = out_y = 0
         while curr_y + f <= orig_dim:
             curr_x = out_x = 0
             while curr_x + f <= orig_dim:
-                # obtain index of largest value in input for current window
-                (a, b) = nanargmax(orig[curr_c, curr_y:curr_y+f, curr_x:curr_x+f])
-                dout[curr_c, curr_y+a, curr_x+b] = dpool[curr_c, out_y, out_x]
-                
+                if out_y < dpool_dim and out_x < dpool_dim:  # Ensure we do not go out of bounds
+                    # Distribute the gradient to all the elements in the pooling region
+                    gradient = dpool[curr_c, out_y, out_x] / (f * f)
+                    dout[curr_c, curr_y:curr_y + f, curr_x:curr_x + f] += gradient
+
                 curr_x += s
                 out_x += 1
             curr_y += s
             out_y += 1
-        
+
     return dout
+
+
