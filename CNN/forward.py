@@ -40,7 +40,7 @@ def convolution(image, filt, bias, s=1):
         
     return out
 
-def avgpool(image, f=3, s=3):
+def avgpool(image, f=2, s=2):
 
     n_c, h_prev, w_prev = image.shape
     h = int((h_prev - f) / s) + 1

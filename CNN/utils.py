@@ -7,13 +7,12 @@ Date: June 12th, 2018
 '''
 from CNN.forward import *
 import numpy as np
-import gzip
 import struct
 
 #####################################################
 ################## Utility Methods ##################
 #####################################################
-        
+
 def extract_data(filename):
     with open(filename, 'rb') as f:
         bin_data = f.read()
@@ -27,7 +26,8 @@ def extract_data(filename):
     for i in range(num_images):
         images[i] = np.array(struct.unpack_from(fmt_image, bin_data, offset)).reshape((num_rows, num_cols))
         offset += struct.calcsize(fmt_image)
-    return images
+    images = images.reshape(num_images, image_size)  # Reshape to [num_images, IMAGE_WIDTH * IMAGE_WIDTH]
+    return images.astype(np.float32)
 
 def extract_labels(filename):
     with open(filename, 'rb') as f:
@@ -41,7 +41,9 @@ def extract_labels(filename):
     for i in range(num_images):
         labels[i] = struct.unpack_from(fmt_image, bin_data, offset)[0]
         offset += struct.calcsize(fmt_image)
-    return labels
+    labels = labels.reshape(num_images, 1)  # Reshape to [num_images, 1]
+    return labels.astype(np.int64)
+
 
 def initializeFilter(size, scale = 1.0):
     stddev = scale/np.sqrt(np.prod(size))
@@ -55,7 +57,7 @@ def nanargmax(arr):
     idxs = np.unravel_index(idx, arr.shape)
     return idxs    
 
-def predict(image, f1, f2, w3, w4, b1, b2, b3, b4, conv_s = 1, pool_f = 3, pool_s = 3):
+def predict(image, f1, f2, w3, w4, b1, b2, b3, b4, conv_s = 1, pool_f = 2, pool_s = 2):
     '''
     Make predictions with trained filters/weights. 
     '''

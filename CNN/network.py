@@ -78,156 +78,149 @@ def conv(image, label, params, conv_s, pool_f, pool_s):
 ################### Optimization ####################
 #####################################################
 
+import numpy as np
+
 def adamGD(batch, num_classes, lr, dim, n_c, beta1, beta2, params, cost):
     '''
-    update the parameters through Adam gradient descnet.
+    Update the parameters through Adam gradient descent.
     '''
     [f1, f2, w3, w4, b1, b2, b3, b4] = params
-    
-    X = batch[:,0:-1] # get batch inputs
-    X = X.reshape(len(batch), n_c, dim, dim)
-    Y = batch[:,-1] # get batch labels
-    
-    cost_ = 0
+
+    X = batch[:, 0:-1].reshape(len(batch), n_c, dim, dim)
+    Y = batch[:, -1]
     batch_size = len(batch)
-    
-    # initialize gradients and momentum,RMS params
-    df1 = np.zeros(f1.shape)
-    df2 = np.zeros(f2.shape)
-    dw3 = np.zeros(w3.shape)
-    dw4 = np.zeros(w4.shape)
-    db1 = np.zeros(b1.shape)
-    db2 = np.zeros(b2.shape)
-    db3 = np.zeros(b3.shape)
-    db4 = np.zeros(b4.shape)
-    
-    v1 = np.zeros(f1.shape)
-    v2 = np.zeros(f2.shape)
-    v3 = np.zeros(w3.shape)
-    v4 = np.zeros(w4.shape)
-    bv1 = np.zeros(b1.shape)
-    bv2 = np.zeros(b2.shape)
-    bv3 = np.zeros(b3.shape)
-    bv4 = np.zeros(b4.shape)
-    
-    s1 = np.zeros(f1.shape)
-    s2 = np.zeros(f2.shape)
-    s3 = np.zeros(w3.shape)
-    s4 = np.zeros(w4.shape)
-    bs1 = np.zeros(b1.shape)
-    bs2 = np.zeros(b2.shape)
-    bs3 = np.zeros(b3.shape)
-    bs4 = np.zeros(b4.shape)
-    
+
+    grads = {name: np.zeros(param.shape) for name, param in zip(['f1', 'f2', 'w3', 'w4', 'b1', 'b2', 'b3', 'b4'], params)}
+    vs = {name: np.zeros(param.shape) for name, param in zip(['f1', 'f2', 'w3', 'w4', 'b1', 'b2', 'b3', 'b4'], params)}
+    ss = {name: np.zeros(param.shape) for name, param in zip(['f1', 'f2', 'w3', 'w4', 'b1', 'b2', 'b3', 'b4'], params)}
+    cost_ = 0
+
     for i in range(batch_size):
-        
         x = X[i]
-        y = np.eye(num_classes)[int(Y[i])].reshape(num_classes, 1) # convert label to one-hot
-        
-        # Collect Gradients for training example
-        grads, loss = conv(x, y, params, 1, 2, 2)
-        [df1_, df2_, dw3_, dw4_, db1_, db2_, db3_, db4_] = grads
-        
-        df1+=df1_
-        db1+=db1_
-        df2+=df2_
-        db2+=db2_
-        dw3+=dw3_
-        db3+=db3_
-        dw4+=dw4_
-        db4+=db4_
+        y = np.eye(num_classes)[int(Y[i])].reshape(num_classes, 1)
+        example_grads, loss = conv(x, y, params, 1, 2, 2)
 
-        cost_+= loss
+        for (name, g), grad in zip(grads.items(), example_grads):
+            g += grad
+        cost_ += loss
 
-    # Parameter Update  
-        
-    v1 = beta1*v1 + (1-beta1)*df1/batch_size # momentum update
-    s1 = beta2*s1 + (1-beta2)*(df1/batch_size)**2 # RMSProp update
-    f1 -= lr * v1/np.sqrt(s1+1e-7) # combine momentum and RMSProp to perform update with Adam
-    
-    bv1 = beta1*bv1 + (1-beta1)*db1/batch_size
-    bs1 = beta2*bs1 + (1-beta2)*(db1/batch_size)**2
-    b1 -= lr * bv1/np.sqrt(bs1+1e-7)
-   
-    v2 = beta1*v2 + (1-beta1)*df2/batch_size
-    s2 = beta2*s2 + (1-beta2)*(df2/batch_size)**2
-    f2 -= lr * v2/np.sqrt(s2+1e-7)
-                       
-    bv2 = beta1*bv2 + (1-beta1) * db2/batch_size
-    bs2 = beta2*bs2 + (1-beta2)*(db2/batch_size)**2
-    b2 -= lr * bv2/np.sqrt(bs2+1e-7)
-    
-    v3 = beta1*v3 + (1-beta1) * dw3/batch_size
-    s3 = beta2*s3 + (1-beta2)*(dw3/batch_size)**2
-    w3 -= lr * v3/np.sqrt(s3+1e-7)
-    
-    bv3 = beta1*bv3 + (1-beta1) * db3/batch_size
-    bs3 = beta2*bs3 + (1-beta2)*(db3/batch_size)**2
-    b3 -= lr * bv3/np.sqrt(bs3+1e-7)
-    
-    v4 = beta1*v4 + (1-beta1) * dw4/batch_size
-    s4 = beta2*s4 + (1-beta2)*(dw4/batch_size)**2
-    w4 -= lr * v4 / np.sqrt(s4+1e-7)
-    
-    bv4 = beta1*bv4 + (1-beta1)*db4/batch_size
-    bs4 = beta2*bs4 + (1-beta2)*(db4/batch_size)**2
-    b4 -= lr * bv4 / np.sqrt(bs4+1e-7)
-    
+    # Parameter update
+    for name, param in zip(['f1', 'f2', 'w3', 'w4', 'b1', 'b2', 'b3', 'b4'], params):
+        g = grads[name]
+        v = vs[name]
+        s = ss[name]
 
-    cost_ = cost_/batch_size
-    cost.append(cost_)
+        v = beta1 * v + (1 - beta1) * g / batch_size
+        s = beta2 * s + (1 - beta2) * (g / batch_size) ** 2
+        param -= lr * v / (np.sqrt(s) + 1e-7)
 
-    params = [f1, f2, w3, w4, b1, b2, b3, b4]
-    
+    cost.append(cost_ / batch_size)
     return params, cost
+
+
+
+#用sgd算法出现了过拟合的现象，导致正确率显著下降，训练一次是30，训练两次降低到了13
+# def sgd(batch, num_classes, lr, dim, n_c, params, cost):
+#     '''
+#     Update the parameters through Stochastic Gradient Descent (SGD).
+#     '''
+#     [f1, f2, w3, w4, b1, b2, b3, b4] = params
+#
+#     X = batch[:, 0:-1]  # get batch inputs
+#     X = X.reshape(len(batch), n_c, dim, dim)
+#     Y = batch[:, -1]  # get batch labels
+#
+#     cost_ = 0
+#     batch_size = len(batch)
+#
+#     # Initialize gradients
+#     df1 = np.zeros(f1.shape)
+#     df2 = np.zeros(f2.shape)
+#     dw3 = np.zeros(w3.shape)
+#     dw4 = np.zeros(w4.shape)
+#     db1 = np.zeros(b1.shape)
+#     db2 = np.zeros(b2.shape)
+#     db3 = np.zeros(b3.shape)
+#     db4 = np.zeros(b4.shape)
+#
+#     for i in range(batch_size):
+#         x = X[i]
+#         y = np.eye(num_classes)[int(Y[i])].reshape(num_classes, 1)  # convert label to one-hot
+#
+#         # Collect gradients for training example
+#         grads, loss = conv(x, y, params, 1, 2, 2)
+#         [df1_, df2_, dw3_, dw4_, db1_, db2_, db3_, db4_] = grads
+#
+#         df1 += df1_
+#         db1 += db1_
+#         df2 += df2_
+#         db2 += db2_
+#         dw3 += dw3_
+#         db3 += db3_
+#         dw4 += dw4_
+#         db4 += db4_
+#
+#         cost_ += loss
+#
+#     # Parameter update using SGD
+#     f1 -= lr * df1 / batch_size
+#     b1 -= lr * db1 / batch_size
+#     f2 -= lr * df2 / batch_size
+#     b2 -= lr * db2 / batch_size
+#     w3 -= lr * dw3 / batch_size
+#     b3 -= lr * db3 / batch_size
+#     w4 -= lr * dw4 / batch_size
+#     b4 -= lr * db4 / batch_size
+#
+#     cost_ = cost_ / batch_size
+#     cost.append(cost_)
+#
+#     params = [f1, f2, w3, w4, b1, b2, b3, b4]
+#
+#     return params, cost
+
 
 #####################################################
 ##################### Training ######################
 #####################################################
 
-def train(num_classes = 10, lr = 0.01, beta1 = 0.95, beta2 = 0.99, img_dim = 28, img_depth = 1, f = 7, num_filt1 = 1, num_filt2 = 1, batch_size = 100, num_epochs = 1, save_path = 'train.pkl'):
+def train(num_classes = 10, lr = 0.01, beta1 = 0.95, beta2 = 0.99, img_dim = 28, img_depth = 1, f = 7, num_filt1 = 1, num_filt2 = 1, batch_size = 32, num_epochs = 1):
 
     # training data
-    m =60000
+    m = 60000
     X = extract_data('./MNIST/raw/train-images-idx3-ubyte')
-    y_dash = extract_labels('./MNIST/raw/train-labels-idx1-ubyte').reshape(m,1)
-    X-= int(np.mean(X))
-    X/= int(np.std(X))
-    train_data = np.hstack((X,y_dash))
-    
+    y_dash = extract_labels('./MNIST/raw/train-labels-idx1-ubyte').reshape(m, 1)
+    X -= int(np.mean(X))
+    X /= int(np.std(X))
+    train_data = np.hstack((X, y_dash))
+
     np.random.shuffle(train_data)
 
-    ## Initializing all the parameters
-    f1, f2, w3, w4 = (num_filt1 ,img_depth,f,f), (num_filt2 ,num_filt1,f,f), (16,64), (10, 16)
+    # Initializing all the parameters
+    f1, f2, w3, w4 = (num_filt1, img_depth, f, f), (num_filt2, num_filt1, f, f), (16, 64), (10, 16)
     f1 = initializeFilter(f1)
     f2 = initializeFilter(f2)
     w3 = initializeWeight(w3)
     w4 = initializeWeight(w4)
 
-    b1 = np.zeros((f1.shape[0],1))
-    b2 = np.zeros((f2.shape[0],1))
-    b3 = np.zeros((w3.shape[0],1))
-    b4 = np.zeros((w4.shape[0],1))
+    b1 = np.zeros((f1.shape[0], 1))
+    b2 = np.zeros((f2.shape[0], 1))
+    b3 = np.zeros((w3.shape[0], 1))
+    b4 = np.zeros((w4.shape[0], 1))
 
     params = [f1, f2, w3, w4, b1, b2, b3, b4]
 
     cost = []
 
-    print("LR:"+str(lr)+", Batch Size:"+str(batch_size))
+    print("LR:" + str(lr) + ", Batch Size:" + str(batch_size))
 
     for epoch in range(num_epochs):
         np.random.shuffle(train_data)
         batches = [train_data[k:k + batch_size] for k in range(0, train_data.shape[0], batch_size)]
 
         t = tqdm(batches)
-        for x,batch in enumerate(t):
+        for x, batch in enumerate(t):
             params, cost = adamGD(batch, num_classes, lr, img_dim, img_depth, beta1, beta2, params, cost)
             t.set_description("Cost: %.2f" % (cost[-1]))
-            
-    to_save = [params, cost]
-    
-    with open(save_path, 'wb') as file:
-        pickle.dump(to_save, file)
-        
-    return cost
-        
+
+    return params, cost
